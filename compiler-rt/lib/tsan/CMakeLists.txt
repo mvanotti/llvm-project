@@ -6,7 +6,7 @@ set(TSAN_CFLAGS ${SANITIZER_COMMON_CFLAGS})
 # SANITIZER_COMMON_CFLAGS contains -fPIC, but it's performance-critical for
 # TSan runtime to be built with -fPIE to reduce the number of register spills.
 # On FreeBSD however it provokes linkage issue thus we disable it.
-if(NOT CMAKE_SYSTEM MATCHES "FreeBSD")
+if(NOT CMAKE_SYSTEM MATCHES "FreeBSD" AND NOT CMAKE_SYSTEM MATCHES "Fuchsia")
   append_list_if(COMPILER_RT_HAS_FPIE_FLAG -fPIE TSAN_CFLAGS)
 endif()
 append_rtti_flag(OFF TSAN_CFLAGS)
@@ -32,7 +32,6 @@ set(TSAN_SOURCES
   rtl/tsan_fd.cpp
   rtl/tsan_flags.cpp
   rtl/tsan_ignoreset.cpp
-  rtl/tsan_interceptors_posix.cpp
   rtl/tsan_interface.cpp
   rtl/tsan_interface_ann.cpp
   rtl/tsan_interface_atomic.cpp
@@ -64,12 +63,19 @@ if(APPLE)
   list(APPEND TSAN_SOURCES
     rtl/tsan_interceptors_mac.cpp
     rtl/tsan_interceptors_mach_vm.cpp
+    rtl/tsan_interceptors_posix.cpp
     rtl/tsan_platform_mac.cpp
     rtl/tsan_platform_posix.cpp
     )
+elseif(FUCHSIA)
+  list(APPEND TSAN_SOURCES
+    rtl/tsan_platform_fuchsia.cpp
+    rtl/tsan_interceptors_malloc.cpp
+  )
 elseif(UNIX)
   # Assume Linux
   list(APPEND TSAN_SOURCES
+    rtl/tsan_interceptors_posix.cpp
     rtl/tsan_platform_linux.cpp
     rtl/tsan_platform_posix.cpp
     )
@@ -162,6 +168,36 @@ if(APPLE)
     COMMENT "Checking TSan Go runtime..."
     VERBATIM)
   set_target_properties(GotsanRuntimeCheck PROPERTIES FOLDER "Compiler-RT Misc")
+elseif(FUCHSIA)
+  add_asm_sources(TSAN_ASM_SOURCES rtl/tsan_rtl_amd64.S)
+
+  set(TSAN_LINK_LIBS ${SANITIZER_COMMON_LINK_LIBS})
+
+  # add_weak_symbols("ubsan" WEAK_SYMBOL_LINK_FLAGS)
+  # add_weak_symbols("sanitizer_common" WEAK_SYMBOL_LINK_FLAGS)
+
+  add_compiler_rt_runtime(clang_rt.tsan
+    SHARED
+    OS ${TSAN_SUPPORTED_OS}
+    ARCHS ${TSAN_SUPPORTED_ARCH}
+    SOURCES ${TSAN_SOURCES} ${TSAN_CXX_SOURCES} ${TSAN_ASM_SOURCES}
+    ADDITIONAL_HEADERS ${TSAN_HEADERS}
+    OBJECT_LIBS RTInterception
+                RTSanitizerCommon
+                RTSanitizerCommonLibc
+                RTSanitizerCommonCoverage
+                RTSanitizerCommonSymbolizer
+                RTUbsan
+    CFLAGS ${TSAN_RTL_CFLAGS}
+    LINK_FLAGS ${SANITIZER_COMMON_LINK_FLAGS} ${WEAK_SYMBOL_LINK_FLAGS} "-Wl,-z,undefs"
+    LINK_LIBS ${TSAN_LINK_LIBS}
+    PARENT_TARGET tsan)
+  add_compiler_rt_object_libraries(RTTsan_dynamic
+    OS ${TSAN_SUPPORTED_OS}
+    ARCHS ${TSAN_SUPPORTED_ARCH}
+    SOURCES ${TSAN_SOURCES} ${TSAN_CXX_SOURCES} ${TSAN_ASM_SOURCES}
+    ADDITIONAL_HEADERS ${TSAN_HEADERS}
+    CFLAGS ${TSAN_RTL_CFLAGS})
 else()
   foreach(arch ${TSAN_SUPPORTED_ARCH})
     if(arch STREQUAL "x86_64")
@@ -244,7 +280,7 @@ endif()
 # and Clang's versions. As a workaround do not use --sysroot=. on FreeBSD/NetBSD
 # until this is addressed.
 if(COMPILER_RT_HAS_SYSROOT_FLAG AND NOT CMAKE_SYSTEM_NAME MATCHES "FreeBSD"
-   AND NOT CMAKE_SYSTEM_NAME MATCHES "NetBSD")
+    AND NOT CMAKE_SYSTEM_NAME MATCHES "NetBSD" AND NOT CMAKE_SYSTEM_NAME MATCHES "Fuchsia")
   file(GLOB _tsan_generic_sources rtl/tsan*)
   file(GLOB _tsan_platform_sources rtl/tsan*posix* rtl/tsan*mac*
                                    rtl/tsan*linux*)

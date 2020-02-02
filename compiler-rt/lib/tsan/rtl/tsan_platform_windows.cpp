@@ -32,6 +32,17 @@ void InitializePlatformEarly() {
 void InitializePlatform() {
 }
 
+
+void ZeroPages(uptr addr, uptr size) {
+  UnmapOrDie((void*)addr, size);
+  if (!MmapFixedSuperNoReserve(addr, size))
+    Die();
+}
+
+void DontNeedShadowFor(uptr addr, uptr size) {
+  ReleaseMemoryPagesToOS(MemToShadow(addr), MemToShadow(addr + size));
+}
+
 }  // namespace __tsan
 
 #endif  // SANITIZER_WINDOWS

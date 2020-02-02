@@ -68,8 +68,8 @@ void ThreadContext::OnCreated(void *arg) {
 void ThreadContext::OnReset() {
   CHECK_EQ(sync.size(), 0);
   uptr trace_p = GetThreadTrace(tid);
-  ReleaseMemoryPagesToOS(trace_p, trace_p + TraceSize() * sizeof(Event));
-  //!!! ReleaseMemoryToOS(GetThreadTraceHeader(tid), sizeof(Trace));
+  ZeroPages(trace_p, TraceSize() * sizeof(Event));
+  //!!! ZeroPages(GetThreadTraceHeader(tid), sizeof(Trace));
 }
 
 void ThreadContext::OnDetached(void *arg) {
@@ -249,8 +249,15 @@ void ThreadStart(ThreadState *thr, int tid, tid_t os_id,
   uptr tls_addr = 0;
   uptr tls_size = 0;
 #if !SANITIZER_GO
-  if (thread_type != ThreadType::Fiber)
-    GetThreadStackAndTls(tid == 0, &stk_addr, &stk_size, &tls_addr, &tls_size);
+  if (thread_type != ThreadType::Fiber) {
+    if (SANITIZER_FUCHSIA) {
+      uptr stk_top, stk_bottom;
+      GetThreadStackTopAndBottom(tid == 0, &stk_top, &stk_bottom);
+      stk_addr = stk_bottom;
+      stk_size = stk_top - stk_bottom;
+    } else
+      GetThreadStackAndTls(tid == 0, &stk_addr, &stk_size, &tls_addr, &tls_size);
+  }
 
   if (tid) {
     if (stk_addr && stk_size)

@@ -17,6 +17,7 @@
 #include "sanitizer_common.h"
 #include "sanitizer_libc.h"
 #include "sanitizer_mutex.h"
+#include "sanitizer_file.h"
 
 #include <limits.h>
 #include <pthread.h>
@@ -206,6 +207,16 @@ void *MmapOrDie(uptr size, const char *mem_type, bool raw_report) {
 void *MmapNoReserveOrDie(uptr size, const char *mem_type) {
   return MmapOrDie(size, mem_type);
 }
+
+void HandleDeadlySignal(void *siginfo, void *context, u32 tid, UnwindSignalStackCallbackType unwind, const void *unwind_context) {
+  UNREACHABLE("Fuchsia doesn't have signals");
+}
+
+// Currently, only tsan's background thread needs these functions.
+// The background thread does some optional tasks (e.g., periodically flushing
+// shadow memory), which we don't support on Fuchsia currently.
+void *internal_start_thread(void *(*func)(void *arg), void *arg) { return 0; }
+void internal_join_thread(void *th) { }
 
 void *MmapOrDieOnFatalError(uptr size, const char *mem_type) {
   return DoAnonymousMmapOrDie(size, mem_type, false, false);
@@ -403,6 +414,9 @@ bool IsAccessibleMemoryRange(uptr beg, uptr size) {
 // FIXME implement on this platform.
 void GetMemoryProfile(fill_profile_f cb, uptr *stats, uptr stats_size) {}
 
+fd_t OpenFile(char const *name, FileAccessMode mode, error_t* error_p) { UNIMPLEMENTED(); }
+bool WriteToFile(int fd, void const* buff, uptr buff_size, uptr* bytes_written, error_t *error_p) { UNIMPLEMENTED(); }
+
 bool ReadFileToBuffer(const char *file_name, char **buff, uptr *buff_size,
                       uptr *read_len, uptr max_len, error_t *errno_p) {
   zx_handle_t vmo;
@@ -509,12 +523,18 @@ uptr GetRSS() { UNIMPLEMENTED(); }
 using namespace __sanitizer;
 
 extern "C" {
+
+__attribute__((weak)) void __tsan_init(void);
+
 void __sanitizer_startup_hook(int argc, char **argv, char **envp,
                               void *stack_base, size_t stack_size) {
   __sanitizer::StoredArgv = argv;
   __sanitizer::StoredEnviron = envp;
   __sanitizer::MainThreadStackBase = reinterpret_cast<uintptr_t>(stack_base);
   __sanitizer::MainThreadStackSize = stack_size;
+
+  // TODO(mvanotti): Refactor.
+  if (__tsan_init) __tsan_init();
 }
 
 void __sanitizer_set_report_path(const char *path) {

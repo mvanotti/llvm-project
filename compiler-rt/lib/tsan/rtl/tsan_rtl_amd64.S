@@ -169,6 +169,7 @@ ASM_SYMBOL(__tsan_report_race_thunk):
   ret
   CFI_ENDPROC
 
+#if !defined(__Fuchsia__)
 ASM_HIDDEN(__tsan_setjmp)
 #if defined(__NetBSD__)
 .comm _ZN14__interception15real___setjmp14E,8,8
@@ -360,6 +361,7 @@ ASM_SYMBOL_INTERCEPTOR(__sigsetjmp):
   CFI_ENDPROC
 ASM_SIZE(ASM_SYMBOL_INTERCEPTOR(__sigsetjmp))
 #endif  // !defined(__APPLE__) && !defined(__NetBSD__)
+#endif  // !defined(__Fuchsia__)
 
 NO_EXEC_STACK_DIRECTIVE
 

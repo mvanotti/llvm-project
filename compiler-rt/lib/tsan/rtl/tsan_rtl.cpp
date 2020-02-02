@@ -75,14 +75,17 @@ static ThreadContextBase *CreateThreadContext(u32 tid) {
   internal_snprintf(name, sizeof(name), "trace header %u", tid);
   MapThreadTrace(hdr, sizeof(Trace), name);
   new((void*)hdr) Trace();
-  // We are going to use only a small part of the trace with the default
-  // value of history_size. However, the constructor writes to the whole trace.
-  // Unmap the unused part.
-  uptr hdr_end = hdr + sizeof(Trace);
-  hdr_end -= sizeof(TraceHeader) * (kTraceParts - TraceParts());
-  hdr_end = RoundUp(hdr_end, GetPageSizeCached());
-  if (hdr_end < hdr + sizeof(Trace))
-    UnmapOrDie((void*)hdr_end, hdr + sizeof(Trace) - hdr_end);
+  if (!SANITIZER_FUCHSIA) {
+    // We are going to use only a small part of the trace with the default
+    // value of history_size. However, the constructor writes to the whole trace.
+    // Unmap the unused part.
+    uptr hdr_end = hdr + sizeof(Trace);
+    hdr_end -= sizeof(TraceHeader) * (kTraceParts - TraceParts());
+    hdr_end = RoundUp(hdr_end, GetPageSizeCached());
+    if (hdr_end < hdr + sizeof(Trace)) {
+      UnmapOrDie((void*)hdr_end, hdr + sizeof(Trace) - hdr_end);
+    }
+  }
   void *mem = internal_alloc(MBlockThreadContex, sizeof(ThreadContext));
   return new(mem) ThreadContext(tid);
 }
@@ -236,10 +239,6 @@ static void StopBackgroundThread() {
 #endif
 #endif
 
-void DontNeedShadowFor(uptr addr, uptr size) {
-  ReleaseMemoryPagesToOS(MemToShadow(addr), MemToShadow(addr + size));
-}
-
 #if !SANITIZER_GO
 void UnmapShadow(ThreadState *thr, uptr addr, uptr size) {
   if (size == 0) return;
@@ -249,6 +248,7 @@ void UnmapShadow(ThreadState *thr, uptr addr, uptr size) {
 }
 #endif
 
+#if SANITIZER_GO
 void MapShadow(uptr addr, uptr size) {
   // Global data is not 64K aligned, but there are no adjacent mappings,
   // so we can get away with unaligned mapping.
@@ -290,12 +290,17 @@ void MapShadow(uptr addr, uptr size) {
   VPrintf(2, "mapped meta shadow for (%p-%p) at (%p-%p)\n",
       addr, addr+size, meta_begin, meta_end);
 }
+#endif // SANITIZER_GO
 
 void MapThreadTrace(uptr addr, uptr size, const char *name) {
   DPrintf("#0: Mapping trace at %p-%p(0x%zx)\n", addr, addr + size, size);
   CHECK_GE(addr, TraceMemBeg());
   CHECK_LE(addr + size, TraceMemEnd());
   CHECK_EQ(addr, addr & ~((64 << 10) - 1));  // windows wants 64K alignment
+  if (SANITIZER_FUCHSIA) {
+    // Fuchsia already maps thread trace memory.
+    return;
+  }
   if (!MmapFixedSuperNoReserve(addr, size, name)) {
     Printf("FATAL: ThreadSanitizer can not mmap thread trace (%p/%p)\n",
         addr, size);
@@ -959,9 +964,7 @@ static void MemoryRangeSet(ThreadState *thr, uptr pc, uptr addr, uptr size,
     // Reset middle part.
     u64 *p1 = p;
     p = RoundDown(end, kPageSize);
-    UnmapOrDie((void*)p1, (uptr)p - (uptr)p1);
-    if (!MmapFixedSuperNoReserve((uptr)p1, (uptr)p - (uptr)p1))
-      Die();
+    ZeroPages((uptr)p1, (uptr)p - (uptr)p1);
     // Set the ending.
     while (p < end) {
       *p++ = val;

@@ -27,6 +27,10 @@
 
 namespace __sanitizer {
 
+void Symbolizer::Flush() {
+  // Nothing to flush.
+}
+
 // This generic support for offline symbolizing is based on the
 // Fuchsia port.  We don't do any actual symbolization per se.
 // Instead, we emit text containing raw addresses and raw linkage

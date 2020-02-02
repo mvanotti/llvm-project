@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "sanitizer_common/sanitizer_placement_new.h"
+#include "tsan_platform.h"
 #include "tsan_sync.h"
 #include "tsan_rtl.h"
 #include "tsan_mman.h"
@@ -174,9 +175,7 @@ void MetaMap::ResetRange(Processor *proc, uptr p, uptr sz) {
   // meta objects in java heap).
   uptr metap = (uptr)MemToMeta(p0);
   uptr metasz = sz0 / kMetaRatio;
-  UnmapOrDie((void*)metap, metasz);
-  if (!MmapFixedSuperNoReserve(metap, metasz))
-    Die();
+  ZeroPages(metap, metasz);
 }
 
 MBlock* MetaMap::GetBlock(uptr p) {

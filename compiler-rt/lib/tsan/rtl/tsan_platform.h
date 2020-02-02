@@ -26,6 +26,45 @@ namespace __tsan {
 #if !SANITIZER_GO
 
 #if defined(__x86_64__)
+#if defined(__Fuchsia__)
+
+// On Fuchsia/x86_64, we're able to force the application memory into the
+// top 16TiB of user address space. This leaves the rest of memory for
+// use by ThreadSanitizer, except that the first 16MiB are disallowed for
+// allocation. We could pack this more densely, but we have so much address
+// space to work with, there's no point.
+struct Mapping {
+  static const uptr kShadowBeg     = 0x1000'0000'0000ull;
+  static const uptr kShadowEnd     = 0x5000'0000'0000ull;
+  static const uptr kMetaShadowBeg = 0x5000'0000'0000ull;
+  static const uptr kMetaShadowEnd = 0x5800'0000'0000ull;
+  static const uptr kTraceMemBeg   = 0x6000'0000'0000ull;
+  static const uptr kTraceMemEnd   = 0x6200'0000'0000ull;
+  static const uptr kAppMemBeg     = 0x7000'0000'0000ull;
+  static const uptr kAppMemEnd     = 0x8000'0000'0000ull;
+
+  static_assert(kShadowEnd - kShadowBeg == (kAppMemEnd - kAppMemBeg) * kShadowMultiplier,
+      "shadow region matches app region");
+  static_assert(kMetaShadowEnd - kMetaShadowBeg ==
+      (kAppMemEnd - kAppMemBeg) * kMetaShadowSize / kMetaShadowCell,
+      "meta shadow region matches app region");
+
+  // Compatibility with OS-independent code.
+  static const uptr kHeapMemBeg    = kAppMemBeg;
+  static const uptr kHeapMemEnd    = kAppMemEnd;
+
+  // Not used on Fuchsia.
+  static const uptr kLoAppMemBeg   = 0;
+  static const uptr kLoAppMemEnd   = 0;
+  static const uptr kMidAppMemBeg  = 0;
+  static const uptr kMidAppMemEnd  = 0;
+  static const uptr kHiAppMemBeg   = 0;
+  static const uptr kHiAppMemEnd   = 0;
+  static const uptr kAppMemMsk     = 0;
+  static const uptr kAppMemXor     = 0;
+  static const uptr kVdsoBeg       = 0;
+};
+#else
 /*
 C/C++ on linux/x86_64 and freebsd/x86_64
 0000 0000 1000 - 0080 0000 0000: main binary and/or MAP_32BIT mappings (512GB)
@@ -74,6 +113,7 @@ struct Mapping {
   static const uptr kAppMemXor     = 0x040000000000ull;
   static const uptr kVdsoBeg       = 0xf000000000000000ull;
 };
+#endif
 
 #define TSAN_MID_APP_RANGE 1
 #elif defined(__mips64)
@@ -144,6 +184,34 @@ struct Mapping {
   static const uptr kAppMemMsk     =          0x0ull;
   static const uptr kAppMemXor     =          0x0ull;
   static const uptr kVdsoBeg       = 0x7000000000000000ull;
+};
+#elif defined(__aarch64__) && defined(__Fuchsia__)
+
+// Fuchsia doesn't provide support for TSAN on ARM64 yet.
+struct Mapping {
+  static const uptr kShadowBeg     = 0x0ull;
+  static const uptr kShadowEnd     = 0x0ull;
+  static const uptr kMetaShadowBeg = 0x0ull;
+  static const uptr kMetaShadowEnd = 0x0ull;
+  static const uptr kTraceMemBeg   = 0x0ull;
+  static const uptr kTraceMemEnd   = 0x0ull;
+  static const uptr kAppMemBeg     = 0x0ull;
+  static const uptr kAppMemEnd     = 0x0ull;
+
+  // Compatibility with OS-independent code.
+  static const uptr kHeapMemBeg    = kAppMemBeg;
+  static const uptr kHeapMemEnd    = kAppMemEnd;
+
+  // Not used on Fuchsia.
+  static const uptr kLoAppMemBeg   = 0;
+  static const uptr kLoAppMemEnd   = 0;
+  static const uptr kMidAppMemBeg  = 0;
+  static const uptr kMidAppMemEnd  = 0;
+  static const uptr kHiAppMemBeg   = 0;
+  static const uptr kHiAppMemEnd   = 0;
+  static const uptr kAppMemMsk     = 0;
+  static const uptr kAppMemXor     = 0;
+  static const uptr kVdsoBeg       = 0;
 };
 
 #elif defined(__aarch64__)
@@ -550,7 +618,7 @@ uptr MappingImpl(void) {
 
 template<int Type>
 uptr MappingArchImpl(void) {
-#if defined(__aarch64__) && !defined(__APPLE__) && !SANITIZER_GO
+#if defined(__aarch64__) && !defined(__APPLE__) && !defined(__Fuchsia__) && !SANITIZER_GO
   switch (vmaSize) {
     case 39: return MappingImpl<Mapping39, Type>();
     case 42: return MappingImpl<Mapping42, Type>();
@@ -707,7 +775,7 @@ bool IsAppMemImpl(uptr mem) {
 
 ALWAYS_INLINE
 bool IsAppMem(uptr mem) {
-#if defined(__aarch64__) && !defined(__APPLE__) && !SANITIZER_GO
+#if defined(__aarch64__) && !defined(__APPLE__) && !defined(__Fuchsia__) && !SANITIZER_GO
   switch (vmaSize) {
     case 39: return IsAppMemImpl<Mapping39>(mem);
     case 42: return IsAppMemImpl<Mapping42>(mem);
@@ -738,7 +806,7 @@ bool IsShadowMemImpl(uptr mem) {
 
 ALWAYS_INLINE
 bool IsShadowMem(uptr mem) {
-#if defined(__aarch64__) && !defined(__APPLE__) && !SANITIZER_GO
+#if defined(__aarch64__) && !defined(__APPLE__) && !defined(__Fuchsia__) && !SANITIZER_GO
   switch (vmaSize) {
     case 39: return IsShadowMemImpl<Mapping39>(mem);
     case 42: return IsShadowMemImpl<Mapping42>(mem);
@@ -769,7 +837,7 @@ bool IsMetaMemImpl(uptr mem) {
 
 ALWAYS_INLINE
 bool IsMetaMem(uptr mem) {
-#if defined(__aarch64__) && !defined(__APPLE__) && !SANITIZER_GO
+#if defined(__aarch64__) && !defined(__APPLE__) && !defined(__Fuchsia__) && !SANITIZER_GO
   switch (vmaSize) {
     case 39: return IsMetaMemImpl<Mapping39>(mem);
     case 42: return IsMetaMemImpl<Mapping42>(mem);
@@ -797,6 +865,9 @@ template<typename Mapping>
 uptr MemToShadowImpl(uptr x) {
   DCHECK(IsAppMem(x));
 #if !SANITIZER_GO
+#if defined(__Fuchsia__)
+  return ((x - Mapping::kAppMemBeg) & ~(kShadowCell - 1)) * kShadowCnt + Mapping::kShadowBeg;
+#endif
   return (((x) & ~(Mapping::kAppMemMsk | (kShadowCell - 1)))
       ^ Mapping::kAppMemXor) * kShadowCnt;
 #else
@@ -810,7 +881,7 @@ uptr MemToShadowImpl(uptr x) {
 
 ALWAYS_INLINE
 uptr MemToShadow(uptr x) {
-#if defined(__aarch64__) && !defined(__APPLE__) && !SANITIZER_GO
+#if defined(__aarch64__) && !defined(__APPLE__) && !defined(__Fuchsia__) && !SANITIZER_GO
   switch (vmaSize) {
     case 39: return MemToShadowImpl<Mapping39>(x);
     case 42: return MemToShadowImpl<Mapping42>(x);
@@ -837,6 +908,9 @@ uptr MemToShadow(uptr x) {
 template<typename Mapping>
 u32 *MemToMetaImpl(uptr x) {
   DCHECK(IsAppMem(x));
+#if defined(__Fuchsia__)
+  return  (u32*) (((x & ~(kMetaShadowCell - 1)) - Mapping::kAppMemBeg) / kMetaShadowCell * kMetaShadowSize +  Mapping::kMetaShadowBeg);
+#endif
 #if !SANITIZER_GO
   return (u32*)(((((x) & ~(Mapping::kAppMemMsk | (kMetaShadowCell - 1)))) /
       kMetaShadowCell * kMetaShadowSize) | Mapping::kMetaShadowBeg);
@@ -853,7 +927,7 @@ u32 *MemToMetaImpl(uptr x) {
 
 ALWAYS_INLINE
 u32 *MemToMeta(uptr x) {
-#if defined(__aarch64__) && !defined(__APPLE__) && !SANITIZER_GO
+#if defined(__aarch64__) && !defined(__APPLE__) && !defined(__Fuchsia__) && !SANITIZER_GO
   switch (vmaSize) {
     case 39: return MemToMetaImpl<Mapping39>(x);
     case 42: return MemToMetaImpl<Mapping42>(x);
@@ -886,6 +960,9 @@ uptr ShadowToMemImpl(uptr s) {
   // bijection, so we try to restore the address as belonging to low/mid/high
   // range consecutively and see if shadow->app->shadow mapping gives us the
   // same address.
+#if defined(__Fuchsia__)
+  return ((s - Mapping::kShadowBeg) / kShadowCnt) + Mapping::kAppMemBeg;
+#endif
   uptr p = (s / kShadowCnt) ^ Mapping::kAppMemXor;
   if (p >= Mapping::kLoAppMemBeg && p < Mapping::kLoAppMemEnd &&
       MemToShadow(p) == s)
@@ -909,7 +986,7 @@ uptr ShadowToMemImpl(uptr s) {
 
 ALWAYS_INLINE
 uptr ShadowToMem(uptr s) {
-#if defined(__aarch64__) && !defined(__APPLE__) && !SANITIZER_GO
+#if defined(__aarch64__) && !defined(__APPLE__) && !defined(__Fuchsia__) && !SANITIZER_GO
   switch (vmaSize) {
     case 39: return ShadowToMemImpl<Mapping39>(s);
     case 42: return ShadowToMemImpl<Mapping42>(s);
@@ -948,7 +1025,7 @@ uptr GetThreadTraceImpl(int tid) {
 
 ALWAYS_INLINE
 uptr GetThreadTrace(int tid) {
-#if defined(__aarch64__) && !defined(__APPLE__) && !SANITIZER_GO
+#if defined(__aarch64__) && !defined(__APPLE__) && !defined(__Fuchsia__) && !SANITIZER_GO
   switch (vmaSize) {
     case 39: return GetThreadTraceImpl<Mapping39>(tid);
     case 42: return GetThreadTraceImpl<Mapping42>(tid);
@@ -982,7 +1059,7 @@ uptr GetThreadTraceHeaderImpl(int tid) {
 
 ALWAYS_INLINE
 uptr GetThreadTraceHeader(int tid) {
-#if defined(__aarch64__) && !defined(__APPLE__) && !SANITIZER_GO
+#if defined(__aarch64__) && !defined(__APPLE__) && !defined(__Fuchsia__) && !SANITIZER_GO
   switch (vmaSize) {
     case 39: return GetThreadTraceHeaderImpl<Mapping39>(tid);
     case 42: return GetThreadTraceHeaderImpl<Mapping42>(tid);
@@ -1022,6 +1099,8 @@ int call_pthread_cancel_with_cleanup(int(*fn)(void *c, void *m,
 
 void DestroyThreadState();
 void PlatformCleanUpThreadState(ThreadState *thr);
+void ZeroPages(uptr addr, uptr size);
+void DontNeedShadowFor(uptr addr, uptr size);
 
 }  // namespace __tsan
 
