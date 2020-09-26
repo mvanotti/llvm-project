@@ -57,7 +57,7 @@ struct MapUnmapCallback {
     if (diff != 0)
       size -= diff;
     uptr p_meta = (uptr)MemToMeta(p);
-    ZeroPages(p_meta, size / kMetaRatio);
+    ReleaseTSANPages(p_meta, size / kMetaRatio);
   }
 };
 

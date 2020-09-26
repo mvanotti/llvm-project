@@ -1102,6 +1102,9 @@ void PlatformCleanUpThreadState(ThreadState *thr);
 void ZeroPages(uptr addr, uptr size);
 void DontNeedShadowFor(uptr addr, uptr size);
 
+void ZeroPages(uptr addr, uptr size);
+void ReleaseTSANPages(uptr addr, uptr size);
+
 }  // namespace __tsan
 
 #endif  // TSAN_PLATFORM_H

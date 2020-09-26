@@ -127,8 +127,8 @@ void ZeroPages(uptr addr, uptr size) {
     Die();
 }
 
-void DontNeedShadowFor(uptr addr, uptr size) {
-  ReleaseMemoryPagesToOS(MemToShadow(addr), MemToShadow(addr + size));
+void ReleaseTSANPages(uptr addr, uptr size) {
+  ReleaseMemoryPagesToOS(addr, addr + size);
 }
 
 }  // namespace __tsan

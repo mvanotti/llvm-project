@@ -147,7 +147,7 @@ void WriteMemoryProfile(char *buf, uptr buf_size, uptr nthread, uptr nlive) {
 void FlushShadowMemoryCallback(
     const SuspendedThreadsList &suspended_threads_list,
     void *argument) {
-  ReleaseMemoryPagesToOS(ShadowBeg(), ShadowEnd());
+  ReleaseTSANPages(ShadowBeg(), ShadowEnd() - ShadowBeg());
 }
 #endif
 

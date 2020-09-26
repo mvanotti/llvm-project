@@ -239,6 +239,11 @@ static void StopBackgroundThread() {
 #endif
 #endif
 
+void DontNeedShadowFor(uptr addr, uptr size) {
+  ReleaseTSANPages(MemToShadow(addr),
+                   MemToShadow(addr + size) - MemToShadow(addr));
+}
+
 #if !SANITIZER_GO
 void UnmapShadow(ThreadState *thr, uptr addr, uptr size) {
   if (size == 0) return;
@@ -962,9 +967,10 @@ static void MemoryRangeSet(ThreadState *thr, uptr pc, uptr addr, uptr size,
         *p++ = 0;
     }
     // Reset middle part.
-    u64 *p1 = p;
+    uptr p1 = reinterpret_cast<uptr>(p);
     p = RoundDown(end, kPageSize);
-    ZeroPages((uptr)p1, (uptr)p - (uptr)p1);
+    ZeroPages(p1, reinterpret_cast<uptr>(p) - p1);
+
     // Set the ending.
     while (p < end) {
       *p++ = val;

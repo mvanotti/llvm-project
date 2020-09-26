@@ -68,8 +68,7 @@ void ThreadContext::OnCreated(void *arg) {
 void ThreadContext::OnReset() {
   CHECK_EQ(sync.size(), 0);
   uptr trace_p = GetThreadTrace(tid);
-  ZeroPages(trace_p, TraceSize() * sizeof(Event));
-  //!!! ZeroPages(GetThreadTraceHeader(tid), sizeof(Trace));
+  ReleaseTSANPages(trace_p, TraceSize() * sizeof(Event));
 }
 
 void ThreadContext::OnDetached(void *arg) {
