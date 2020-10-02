@@ -63,6 +63,7 @@ if(APPLE)
   list(APPEND TSAN_SOURCES
     rtl/tsan_interceptors_mac.cpp
     rtl/tsan_interceptors_mach_vm.cpp
+    rtl/tsan_interceptors_malloc.cpp
     rtl/tsan_interceptors_posix.cpp
     rtl/tsan_platform_mac.cpp
     rtl/tsan_platform_posix.cpp
@@ -75,6 +76,7 @@ elseif(FUCHSIA)
 elseif(UNIX)
   # Assume Linux
   list(APPEND TSAN_SOURCES
+    rtl/tsan_interceptors_malloc.cpp
     rtl/tsan_interceptors_posix.cpp
     rtl/tsan_platform_linux.cpp
     rtl/tsan_platform_posix.cpp
