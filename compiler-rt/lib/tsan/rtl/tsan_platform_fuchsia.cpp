@@ -55,10 +55,8 @@ void ZeroPages(uptr addr, uptr size) {
   __sanitizer_zero_memory(addr, size);
 }
 
-void DontNeedShadowFor(uptr addr, uptr size) {
-  uptr shadow_beg = MemToShadow(addr);
-  uptr shadow_end = MemToShadow(addr + size);
-  __sanitizer_zero_memory(shadow_beg, shadow_end - shadow_beg);
+void ReleaseTSANPages(uptr addr, uptr size) {
+  ZeroPages(addr, size);
 }
 
 struct ThreadParam {
