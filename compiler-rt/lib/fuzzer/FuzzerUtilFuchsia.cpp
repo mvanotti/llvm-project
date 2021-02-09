@@ -52,6 +52,11 @@ void CrashTrampolineAsm() __asm__("CrashTrampolineAsm");
 
 namespace {
 
+// The crashing thread might not have a valid stack.
+// Before executing the crash trampoline, we set up a new stack for them.
+constexpr size_t kCrashStackSize = 4096 * 4;
+char *CrashStack[kCrashStackSize];
+
 // Helper function to handle Zircon syscall failures.
 void ExitOnErr(zx_status_t Status, const char *Syscall) {
   if (Status != ZX_OK) {
@@ -238,6 +243,11 @@ void CrashHandler(zx_handle_t *Event) {
   // this handler.
   struct ScopedHandle {
     ~ScopedHandle() { _zx_handle_close(Handle); }
+    ScopedHandle() : Handle(ZX_HANDLE_INVALID) {}
+    ScopedHandle(ScopedHandle &&Other)
+        : Handle(std::exchange(Other.Handle, ZX_HANDLE_INVALID)) {}
+    ScopedHandle(const ScopedHandle &Other) = delete;
+    ScopedHandle &operator=(const ScopedHandle &) = delete;
     zx_handle_t Handle = ZX_HANDLE_INVALID;
   };
 
@@ -253,6 +263,9 @@ void CrashHandler(zx_handle_t *Event) {
 
   ExitOnErr(_zx_object_signal(*Event, 0, ZX_USER_SIGNAL_0),
             "_zx_object_signal");
+
+  zx_koid_t crashed_tid = ZX_KOID_INVALID;
+  std::vector<ScopedHandle> unhandled_exceptions;
 
   // This thread lives as long as the process in order to keep handling
   // crashes.  In practice, the first crashed thread to reach the end of the
@@ -292,18 +305,41 @@ void CrashHandler(zx_handle_t *Event) {
                                     sizeof(GeneralRegisters)),
               "_zx_thread_read_state");
 
+    if (crashed_tid != ZX_KOID_INVALID) {
+      // If we reach this point it means that we received more than
+      // one exception. This new exception could either be from the
+      // same thread as the first exception or from another thread.
+      Printf("libFuzzer: An exception occurred while handling a previous "
+             "crash.\n");
+      if (crashed_tid == ExceptionInfo.tid) {
+        // Exception came from the same thread. This means that the exception
+        // handling code crashed. This is bad. Exiting here at least
+        // will generate a crashing artifact.
+        exit(1);
+      } else {
+        // We received a crash from a different thread. Leave it suspended and
+        // wait for the next exception.
+        unhandled_exceptions.push_back(std::move(Exception));
+        continue;
+      }
+    }
+
+    crashed_tid = ExceptionInfo.tid;
+
     // To unwind properly, we need to push the crashing thread's register state
     // onto the stack and jump into a trampoline with CFI instructions on how
     // to restore it.
 #if defined(__x86_64__)
-    uintptr_t StackPtr = GeneralRegisters.rsp - CFAOffset;
+    uintptr_t StackPtr =
+        reinterpret_cast<uintptr_t>(&CrashStack[kCrashStackSize]) - CFAOffset;
     __unsanitized_memcpy(reinterpret_cast<void *>(StackPtr), &GeneralRegisters,
                          sizeof(GeneralRegisters));
     GeneralRegisters.rsp = StackPtr;
     GeneralRegisters.rip = reinterpret_cast<zx_vaddr_t>(CrashTrampolineAsm);
 
 #elif defined(__aarch64__)
-    uintptr_t StackPtr = GeneralRegisters.sp - CFAOffset;
+    uintptr_t StackPtr =
+        reinterpret_cast<uintptr_t>(&CrashStack[kCrashStackSize]) - CFAOffset;
     __unsanitized_memcpy(reinterpret_cast<void *>(StackPtr), &GeneralRegisters,
                          sizeof(GeneralRegisters));
     GeneralRegisters.sp = StackPtr;

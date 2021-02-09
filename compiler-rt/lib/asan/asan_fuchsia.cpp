@@ -62,7 +62,30 @@ void AsanOnDeadlySignal(int signo, void *siginfo, void *context) {
   UNIMPLEMENTED();
 }
 
-bool PlatformUnpoisonStacks() { return false; }
+bool PlatformUnpoisonStacks() {
+  // Is the current stack the default one? If not,
+  // we are in a different stack (might be a crash stack from fuzzing).
+  // Unpoison the original stack and the current stack page.
+  AsanThread *curr_thread = GetCurrentThread();
+  CHECK(curr_thread != nullptr);
+  uptr top = curr_thread->stack_top();
+  uptr bottom = curr_thread->stack_bottom();
+
+  int local_var;
+  uptr local_stack = reinterpret_cast<uptr>(&local_stack);
+
+  if (local_stack < bottom || local_stack > top) {
+    // The current stack is not the default stack.
+    // Unpoison the entire default stack and the current stack page.
+    UnpoisonStack(bottom, top, "default");
+    bottom = RoundDownTo(local_stack, GetPageSize());
+    top = bottom + GetPageSize();
+    UnpoisonStack(bottom, top, "unknown");
+    return true;
+  }
+
+  return false;
+}
 
 // We can use a plain thread_local variable for TSD.
 static thread_local void *per_thread;
