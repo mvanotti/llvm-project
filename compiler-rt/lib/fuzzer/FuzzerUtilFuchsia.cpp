@@ -169,9 +169,138 @@ constexpr size_t CFAOffset = (sizeof(zx_thread_state_general_regs_t) + 15) & -(u
 // Produces an assembler immediate operand for the named or numbered register.
 // This operand contains the offset of the register relative to the CFA.
 #define ASM_OPERAND_REG(reg) \
-  [reg] "i"(offsetof(zx_thread_state_general_regs_t, reg) - CFAOffset),
+  [reg] "i"(offsetof(zx_thread_state_general_regs_t, reg)),
 #define ASM_OPERAND_NUM(num)                                 \
-  [x##num] "i"(offsetof(zx_thread_state_general_regs_t, r[num]) - CFAOffset),
+  [x##num] "i"(offsetof(zx_thread_state_general_regs_t, r[num])),
+
+#if defined(__x86_64__)
+// DWARF Register Number Mappings for x86-64
+// Extracted from https://www.uclibc.org/docs/psABI-x86_64.pdf
+// System V Application Binary Interface
+// AMD64 Architecture Processor Supplement
+// Draft Version 0.99.7
+#define REG_DWARF_NUMBER_rax 0
+#define REG_DWARF_NUMBER_rbx 3
+#define REG_DWARF_NUMBER_rcx 2
+#define REG_DWARF_NUMBER_rdx 1
+#define REG_DWARF_NUMBER_rsi 4
+#define REG_DWARF_NUMBER_rdi 5
+#define REG_DWARF_NUMBER_rbp 6
+#define REG_DWARF_NUMBER_rsp 7
+#define REG_DWARF_NUMBER_r8 8
+#define REG_DWARF_NUMBER_r9 9
+#define REG_DWARF_NUMBER_r10 10
+#define REG_DWARF_NUMBER_r11 11
+#define REG_DWARF_NUMBER_r12 12
+#define REG_DWARF_NUMBER_r13 13
+#define REG_DWARF_NUMBER_r14 14
+#define REG_DWARF_NUMBER_r15 15
+#define REG_DWARF_NUMBER_rip 16
+
+#define REG_DWARF_NUMBER(reg) (REG_DWARF_NUMBER_ ## reg)
+
+// Offsets for different x86-64 registers into the
+// zx_thread_state_general_regs_t structure.
+#define REG_OFFSET_rax 0
+#define REG_OFFSET_rbx 8
+#define REG_OFFSET_rcx 16
+#define REG_OFFSET_rdx 24
+#define REG_OFFSET_rsi 32
+#define REG_OFFSET_rdi 40
+#define REG_OFFSET_rbp 48
+#define REG_OFFSET_rsp 56
+#define REG_OFFSET_r8 64
+#define REG_OFFSET_r9 72
+#define REG_OFFSET_r10 80
+#define REG_OFFSET_r11 88
+#define REG_OFFSET_r12 96
+#define REG_OFFSET_r13 104
+#define REG_OFFSET_r14 112
+#define REG_OFFSET_r15 120
+#define REG_OFFSET_rip 128
+#define REG_OFFSET(reg) (REG_OFFSET_ ## reg)
+
+#define REG_FOREACH(OP_REG) \
+  OP_REG(rax)                            \
+  OP_REG(rbx)                            \
+  OP_REG(rcx)                            \
+  OP_REG(rdx)                            \
+  OP_REG(rsi)                            \
+  OP_REG(rdi)                            \
+  OP_REG(rbp)                            \
+  OP_REG(rsp)                            \
+  OP_REG(r8)                             \
+  OP_REG(r9)                             \
+  OP_REG(r10)                            \
+  OP_REG(r11)                            \
+  OP_REG(r12)                            \
+  OP_REG(r13)                            \
+  OP_REG(r14)                            \
+  OP_REG(r15)                            \
+  OP_REG(rip)
+
+#define CHECK_OFFSET(reg, offset) static_assert(offsetof(zx_thread_state_general_regs_t, reg) == offset, "offset mismatch");
+#define REG_CHECK_OFFSET(reg) CHECK_OFFSET(reg, REG_OFFSET(reg))
+
+REG_FOREACH(REG_CHECK_OFFSET)
+
+#elif defined(__aarch64__)
+
+#define REG_DWARF_NUMBER(x) (x)
+#define REG_DWARF_NUMBER_LR (30)
+#define REG_DWARF_NUMBER_SP (31)
+#define REG_DWARF_NUMBER_PC (32)
+#define REG_DWARF_NUMBER_ELR (33)
+
+#define REG_OFFSET(x) (x * 8)
+#define REG_OFFSET_LR (30 * 8)
+#define REG_OFFSET_SP (31 * 8)
+#define REG_OFFSET_PC (32 * 8)
+
+#define REG_FOREACH(OP_REG) \
+  OP_REG(0)                            \
+  OP_REG(1)                            \
+  OP_REG(2)                            \
+  OP_REG(3)                            \
+  OP_REG(4)                            \
+  OP_REG(5)                            \
+  OP_REG(6)                            \
+  OP_REG(7)                            \
+  OP_REG(8)                            \
+  OP_REG(9)                            \
+  OP_REG(10)                           \
+  OP_REG(11)                           \
+  OP_REG(12)                           \
+  OP_REG(13)                           \
+  OP_REG(14)                           \
+  OP_REG(15)                           \
+  OP_REG(16)                           \
+  OP_REG(17)                           \
+  OP_REG(18)                           \
+  OP_REG(19)                           \
+  OP_REG(20)                           \
+  OP_REG(21)                           \
+  OP_REG(22)                           \
+  OP_REG(23)                           \
+  OP_REG(24)                           \
+  OP_REG(25)                           \
+  OP_REG(26)                           \
+  OP_REG(27)                           \
+  OP_REG(28)                           \
+  OP_REG(29)                            
+
+#define CHECK_OFFSET(reg, offset) static_assert(offsetof(zx_thread_state_general_regs_t, reg) == offset, "offset mismatch");
+
+#define CHECK_OFFSET_R(reg) CHECK_OFFSET(r[reg], REG_OFFSET(reg))
+
+REG_FOREACH(CHECK_OFFSET_R)
+CHECK_OFFSET(sp, REG_OFFSET_SP)
+CHECK_OFFSET(pc, REG_OFFSET_PC)
+CHECK_OFFSET(lr, REG_OFFSET_LR)
+
+
+#endif
+
 
 // Trampoline to bridge from the assembly below to the static C++ crash
 // callback.
@@ -183,14 +312,69 @@ static void StaticCrashHandler() {
   }
 }
 
+// XSTR expands into a string literal containing the expansion of its arguments.
+#define XSTR(...) STR(__VA_ARGS__)
+#define STR(...) #__VA_ARGS__
+
+// This macro expands into L, H, where L and H are bytes,
+// representing the LEB128 encoding of X. 
+// The first byte is bits [0, 7) of X, with a 1 in bit 7.
+// The second byte is bits [7, 14) of X, with a 0 in bit 15. 
+// It is only valid to call this macro with 0 <= X < 0x3FFF
+#define ULEB128_2(X) (X & 0x7F) | 0x80, (X >> 7) & 0x7F
+
+#define DW_CFA_def_cfa_expression 0x0f
+#define DW_CFA_expression 0x10
+#define DW_OP_breg7 0x77
+#define DW_OP_deref 0x06
+
+#if defined(__x86_64__)
+
+#define cfi_cfa_deref_rsp(offset) ".cfi_escape " \
+	"0x0f, " /* DW_CFA_def_cfa_expression */ \
+	"0x04, "                      /* size */ \
+	"0x77, "               /* DW_OP_breg7 */ \
+       	XSTR(ULEB128_2(offset)) ", " /* offset*/ \
+	"0x06  "               /* DW_OP_deref */ \
+        "\n"
+
+#define cfi_reg_from_rsp(regno, offset) ".cfi_escape " \
+	"0x10, "               /* DW_CFA_expression */ \
+	XSTR(regno) ", "         /* register number */ \
+	"0x03, "                            /* size */ \
+	"0x77, "                     /* DW_OP_breg7 */ \
+	XSTR(ULEB128_2(offset))           /* offset */ \
+	"\n"
+
+#elif defined(__aarch64__)
+
+#define cfi_cfa_deref_rsp(offset) ".cfi_escape " \
+	"0x0f, " /* DW_CFA_def_cfa_expression */ \
+	"0x04, "                      /* size */ \
+	"0x8f, "              /* DW_OP_breg31 */ \
+       	XSTR(ULEB128_2(offset)) ", " /* offset*/ \
+	"0x06  "               /* DW_OP_deref */ \
+        "\n"
+
+#define cfi_reg_from_rsp(regno, offset) ".cfi_escape " \
+	"0x10, "               /* DW_CFA_expression */ \
+	XSTR(regno) ", "         /* register number */ \
+	"0x03, "                            /* size */ \
+	"0x8f, "                    /* DW_OP_breg31 */ \
+	XSTR(ULEB128_2(offset))           /* offset */ \
+	"\n"
+
+#endif
+
+#define cfi_reg(reg) cfi_reg_from_rsp(REG_DWARF_NUMBER(reg), REG_OFFSET(reg))
+
 // Creates the trampoline with the necessary CFI information to unwind through
 // to the crashing call stack:
 //  * Defining the CFA so that it points to the stack pointer at the point
 //    of crash.
 //  * Storing all registers at the point of crash in the stack and refer to them
-//    via CFI information (relative to the CFA).
+//    via CFI information (relative to the current stack pointer).
 //  * Setting the return column so the unwinder knows how to continue unwinding.
-//  * (x86_64) making sure rsp is aligned before calling StaticCrashHandler.
 //  * Calling StaticCrashHandler that will trigger the unwinder.
 //
 // The __attribute__((used)) is necessary because the function
@@ -205,20 +389,19 @@ void MakeTrampoline() {
     ".cfi_startproc simple\n"
     ".cfi_signal_frame\n"
 #if defined(__x86_64__)
+    cfi_cfa_deref_rsp(REG_OFFSET(rsp))
+    REG_FOREACH(cfi_reg)
     ".cfi_return_column rip\n"
-    ".cfi_def_cfa rsp, %c[CFAOffset]\n"
-    FOREACH_REGISTER(CFI_OFFSET_REG, CFI_OFFSET_NUM)
-    "mov %%rsp, %%rbp\n"
-    ".cfi_def_cfa_register rbp\n"
-    "andq $-16, %%rsp\n"
     "call %c[StaticCrashHandler]\n"
     "ud2\n"
 #elif defined(__aarch64__)
+    cfi_cfa_deref_rsp(REG_OFFSET_SP)
+    cfi_reg_from_rsp(REG_DWARF_NUMBER_PC, REG_OFFSET_PC)
+    cfi_reg_from_rsp(REG_DWARF_NUMBER_ELR, REG_OFFSET_PC)
+    cfi_reg_from_rsp(REG_DWARF_NUMBER_LR, REG_OFFSET_LR)
+    cfi_reg_from_rsp(REG_DWARF_NUMBER_SP, REG_OFFSET_SP)
     ".cfi_return_column 33\n"
-    ".cfi_def_cfa sp, %c[CFAOffset]\n"
-    FOREACH_REGISTER(CFI_OFFSET_REG, CFI_OFFSET_NUM)
-    ".cfi_offset 33, %c[pc]\n"
-    ".cfi_offset 30, %c[lr]\n"
+    REG_FOREACH(cfi_reg)
     "bl %c[StaticCrashHandler]\n"
     "brk 1\n"
 #else
@@ -229,13 +412,7 @@ void MakeTrampoline() {
     ".popsection\n"
     ".cfi_startproc\n"
     : // No outputs
-    : FOREACH_REGISTER(ASM_OPERAND_REG, ASM_OPERAND_NUM)
-#if defined(__aarch64__)
-      ASM_OPERAND_REG(pc)
-      ASM_OPERAND_REG(lr)
-#endif
-      [StaticCrashHandler] "i" (StaticCrashHandler),
-      [CFAOffset] "i" (CFAOffset));
+    : [StaticCrashHandler] "i" (StaticCrashHandler));
 }
 
 void CrashHandler(zx_handle_t *Event) {
@@ -325,6 +502,7 @@ void CrashHandler(zx_handle_t *Event) {
     }
 
     crashed_tid = ExceptionInfo.tid;
+    Printf("LF Version 1");
 
     // To unwind properly, we need to push the crashing thread's register state
     // onto the stack and jump into a trampoline with CFI instructions on how
