@@ -113,6 +113,7 @@ LLVMInitializeAArch64Target() {
   initializeAArch64DAGToDAGISelLegacyPass(PR);
   initializeAArch64CondBrTuningPass(PR);
   initializeAArch64Arm64ECCallLoweringPass(PR);
+  initializeAArch64GuardHighBitLegacyPass(PR);
   initializeSVEShuffleOptsPass(PR);
 }
 
@@ -787,6 +788,7 @@ void AArch64PassConfig::addPostBBSections() {
   addPass(createAArch64PointerAuthPass());
   if (CLOpts.enable_branch_targets)
     addPass(createAArch64BranchTargetsPass());
+  addPass(createAArch64GuardHighBitPass());
   // Relax conditional branch instructions if they're otherwise out of
   // range of their destination.
   if (CLOpts.enable_branch_relax)

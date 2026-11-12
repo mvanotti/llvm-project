@@ -360,6 +360,10 @@ bool AArch64TTIImpl::areInlineCompatible(const Function *Caller,
   if (hasPossibleIncompatibleOps(Callee, ConsiderZA, ConsiderZT, ConsiderSM))
     return false;
 
+  if (Caller->getFnAttribute("guard-high-bit") !=
+      Callee->getFnAttribute("guard-high-bit"))
+    return false;
+
   return BaseT::areInlineCompatible(Caller, Callee);
 }
 

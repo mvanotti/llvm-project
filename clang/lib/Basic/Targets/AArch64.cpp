@@ -749,6 +749,10 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
   if (Opts.GuardedControlStack)
     Builder.defineMacro("__ARM_FEATURE_GCS_DEFAULT", "1");
 
+  if (Opts.HasGuardHighBit)
+    Builder.defineMacro("__GUARD_HIGH_BIT__",
+                        std::to_string(Opts.GuardHighBit));
+
   if (HasLS64)
     Builder.defineMacro("__ARM_FEATURE_LS64", "1");
 

@@ -315,6 +315,12 @@ static void getAArch64MultilibFlags(const Driver &D,
     Result.push_back(BranchProtectionArg->getAsString(Args));
   }
 
+  if (const Arg *GuardHighBitArg =
+          Args.getLastArgNoClaim(options::OPT_mguard_high_bit_EQ)) {
+    if (StringRef(GuardHighBitArg->getValue()) != "none")
+      Result.push_back(GuardHighBitArg->getAsString(Args));
+  }
+
   if (FeatureSet.contains("+strict-align"))
     Result.push_back("-mno-unaligned-access");
   else

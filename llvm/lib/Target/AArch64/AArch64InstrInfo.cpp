@@ -10726,7 +10726,9 @@ AArch64InstrInfo::getOutliningCandidateInfo(
             if (outliningCandidatesSigningScopeConsensus(a, b) &&
                 outliningCandidatesSigningKeyConsensus(a, b) &&
                 outliningCandidatesV8_3OpsConsensus(a, b) &&
-                outliningCandidatesPAuthLRConsensus(a, b)) {
+                outliningCandidatesPAuthLRConsensus(a, b) &&
+                a.getMF()->getFunction().getFnAttribute("guard-high-bit") ==
+                    b.getMF()->getFunction().getFnAttribute("guard-high-bit")) {
               return false;
             }
             return true;

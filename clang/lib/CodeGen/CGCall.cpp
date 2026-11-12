@@ -2485,6 +2485,9 @@ static void getTrivialDefaultFunctionAttributes(
   if (!AttrOnCallSite) {
     TargetInfo::BranchProtectionInfo BPI(LangOpts);
     TargetCodeGenInfo::initBranchProtectionFnAttributes(BPI, FuncAttrs);
+    if (LangOpts.HasGuardHighBit)
+      FuncAttrs.addAttribute("guard-high-bit",
+                             std::to_string(LangOpts.GuardHighBit));
   }
 }
 

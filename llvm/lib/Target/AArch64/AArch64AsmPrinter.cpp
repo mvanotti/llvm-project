@@ -156,6 +156,7 @@ public:
       HwasanMemaccessTuple;
   std::map<HwasanMemaccessTuple, MCSymbol *> HwasanMemaccessSymbols;
   void LowerKCFI_CHECK(const MachineInstr &MI);
+  void LowerGUARD_HIGH_BIT_CHECK(const MachineInstr &MI);
   void LowerHWASAN_CHECK_MEMACCESS(const MachineInstr &MI);
   void emitHwasanMemaccessSymbols(Module &M);
 
@@ -777,6 +778,28 @@ void AArch64AsmPrinter::LowerKCFI_CHECK(const MachineInstr &MI) {
 
   unsigned ESR = 0x8000 | ((TypeIndex & 31) << 5) | (AddrIndex & 31);
   EmitToStreamer(*OutStreamer, MCInstBuilder(AArch64::BRK).addImm(ESR));
+  OutStreamer->emitLabel(Pass);
+}
+
+void AArch64AsmPrinter::LowerGUARD_HIGH_BIT_CHECK(const MachineInstr &MI) {
+  Register Reg = MI.getOperand(0).getReg();
+  unsigned Bit = MI.getOperand(1).getImm();
+  assert(Bit < 64 && "Invalid bit index for GUARD_HIGH_BIT_CHECK");
+
+  MCSymbol *Pass = OutContext.createTempSymbol();
+  const MCSymbolRefExpr *PassExpr = MCSymbolRefExpr::create(Pass, OutContext);
+  if (Bit < 32) {
+    EmitToStreamer(*OutStreamer, MCInstBuilder(AArch64::TBNZW)
+                                     .addReg(getWRegFromXReg(Reg))
+                                     .addImm(Bit)
+                                     .addExpr(PassExpr));
+  } else {
+    EmitToStreamer(*OutStreamer, MCInstBuilder(AArch64::TBNZX)
+                                     .addReg(Reg)
+                                     .addImm(Bit)
+                                     .addExpr(PassExpr));
+  }
+  EmitToStreamer(*OutStreamer, MCInstBuilder(AArch64::BRK).addImm(1));
   OutStreamer->emitLabel(Pass);
 }
 
@@ -3973,6 +3996,10 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
 
   case AArch64::KCFI_CHECK:
     LowerKCFI_CHECK(*MI);
+    return;
+
+  case AArch64::GUARD_HIGH_BIT_CHECK:
+    LowerGUARD_HIGH_BIT_CHECK(*MI);
     return;
 
   case AArch64::HWASAN_CHECK_MEMACCESS:

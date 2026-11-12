@@ -6061,6 +6061,12 @@ def mharden_pac_ret_EQ : Joined<["-"], "mharden-pac-ret=">,
   NormalizedValuesScope<"LangOptions::SignReturnAddressHardeningKind">,
   MarshallingInfoEnum<LangOpts<"SignReturnAddressHardening">, "None">;
 
+def mguard_high_bit_EQ : Joined<["-"], "mguard-high-bit=">,
+  Visibility<[ClangOption, CC1Option]>,
+  Flags<[TargetSpecific]>, Group<m_Group>,
+  MetaVarName<"<bit|none>">,
+  HelpText<"Require bit <bit> (0..63) to be set on AArch64 indirect branch targets, or 'none' to disable">;
+
 let Flags = [TargetSpecific] in {
 def mbranch_protection_EQ : Joined<["-"], "mbranch-protection=">,
   Group<m_Group>,

@@ -2593,6 +2593,16 @@ def KCFI_CHECK : Pseudo<
   (outs), (ins GPR64:$ptr, i32imm:$type), []>, Sched<[]>;
 }
 
+// Guard an indirect branch/call target register by requiring bit $bit to be 1.
+// Lowered in AArch64AsmPrinter to an 8-byte sequence:
+//   tbnz $ptr, #$bit, .Lpass
+//   brk #0x1
+// .Lpass:
+let hasSideEffects = 1, mayLoad = 0, mayStore = 0, Size = 8 in {
+def GUARD_HIGH_BIT_CHECK : Pseudo<
+  (outs), (ins GPR64:$ptr, i32imm:$bit), []>, Sched<[]>;
+}
+
 let Uses = [ X9 ], Defs = [ X16, X17, LR, NZCV ] in {
 def HWASAN_CHECK_MEMACCESS : Pseudo<
   (outs), (ins GPR64noip:$ptr, i32imm:$accessinfo),

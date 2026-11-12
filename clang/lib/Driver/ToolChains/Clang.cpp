@@ -1823,6 +1823,24 @@ void Clang::AddAArch64TargetArgs(const ArgList &Args,
 
   // Enable/disable return address signing and indirect branch targets.
   CollectARMPACBTIOptions(getToolChain(), Args, CmdArgs, true /*isAArch64*/);
+
+  if (const Arg *A = Args.getLastArg(options::OPT_mguard_high_bit_EQ)) {
+    const Driver &D = getToolChain().getDriver();
+    StringRef Val = A->getValue();
+    unsigned Bit = 0;
+    if (!Triple.isArch64Bit()) {
+      D.Diag(diag::err_drv_unsupported_opt_for_target)
+          << A->getSpelling() << Triple.str();
+    } else if (Val != "none") {
+      if (Val.getAsInteger(10, Bit) || Bit >= 64) {
+        D.Diag(diag::err_drv_unsupported_option_argument)
+            << A->getSpelling() << Val;
+      } else {
+        CmdArgs.push_back(
+            Args.MakeArgString(Twine("-mguard-high-bit=") + Twine(Bit)));
+      }
+    }
+  }
 }
 
 void Clang::AddLoongArchTargetArgs(const ArgList &Args,
@@ -9536,6 +9554,8 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back("-mllvm");
       CmdArgs.push_back("-aarch64-mark-bti-property");
     }
+    if (Triple.isArch64Bit())
+      Args.ClaimAllArgs(options::OPT_mguard_high_bit_EQ);
     break;
 
   case llvm::Triple::loongarch32:

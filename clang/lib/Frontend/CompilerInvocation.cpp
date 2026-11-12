@@ -4023,6 +4023,10 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
       LangOptions::SignReturnAddressKeyKind::BKey)
     GenerateArg(Consumer, OPT_msign_return_address_key_EQ, "b_key");
 
+  if (Opts.HasGuardHighBit)
+    GenerateArg(Consumer, OPT_mguard_high_bit_EQ,
+                std::to_string(Opts.GuardHighBit));
+
   if (Opts.CXXABI)
     GenerateArg(Consumer, OPT_fcxx_abi_EQ,
                 TargetCXXABI::getSpelling(*Opts.CXXABI));
@@ -4581,6 +4585,21 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
           Diags.Report(diag::err_drv_invalid_value)
               << A->getAsString(Args) << SignKey;
       }
+    }
+  }
+
+  if (Arg *A = Args.getLastArg(OPT_mguard_high_bit_EQ)) {
+    StringRef GuardSpec = A->getValue();
+    unsigned GuardBit = 0;
+    if (GuardSpec == "none") {
+      Opts.HasGuardHighBit = false;
+      Opts.GuardHighBit = 0;
+    } else if (!GuardSpec.getAsInteger(10, GuardBit) && GuardBit < 64) {
+      Opts.HasGuardHighBit = true;
+      Opts.GuardHighBit = GuardBit;
+    } else {
+      Diags.Report(diag::err_drv_invalid_value)
+          << A->getAsString(Args) << GuardSpec;
     }
   }
 

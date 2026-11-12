@@ -296,6 +296,15 @@ Fuchsia::Fuchsia(const Driver &D, const llvm::Triple &Triple,
   Multilibs.push_back(MultilibBuilder("compat", {}, {})
                           .flag("-fc++-abi=itanium")
                           .makeMultilib());
+  // Use the aspace-guard variant when -mguard-high-bit=47 is enabled.
+  Multilibs.push_back(MultilibBuilder("aspace-guard", {}, {})
+                          .flag("-mguard-high-bit=47")
+                          .makeMultilib());
+  Multilibs.push_back(MultilibBuilder("aspace-guard+noexcept", {}, {})
+                          .flag("-mguard-high-bit=47")
+                          .flag("-fexceptions", /*Disallow=*/true)
+                          .flag("-fno-exceptions")
+                          .makeMultilib());
 
   Multilibs.FilterOut([&](const Multilib &M) {
     std::vector<std::string> RD = FilePaths(M);
@@ -314,6 +323,10 @@ Fuchsia::Fuchsia(const Driver &D, const llvm::Triple &Triple,
 
   addMultilibFlag(Args.getLastArgValue(options::OPT_fcxx_abi_EQ) == "itanium",
                   "-fc++-abi=itanium", Flags);
+  addMultilibFlag(Triple.isAArch64() && Triple.isArch64Bit() &&
+                      Args.getLastArgValue(options::OPT_mguard_high_bit_EQ) ==
+                          "47",
+                  "-mguard-high-bit=47", Flags);
 
   Multilibs.setFilePathsCallback(FilePaths);
 

@@ -71,6 +71,7 @@ FunctionPass *createFalkorHWPFFixPass();
 FunctionPass *createFalkorMarkStridedAccessesPass();
 FunctionPass *createAArch64PointerAuthPass();
 FunctionPass *createAArch64BranchTargetsPass();
+FunctionPass *createAArch64GuardHighBitPass();
 FunctionPass *createAArch64CodeLayoutOptPass();
 FunctionPass *createAArch64MIPeepholeOptLegacyPass();
 FunctionPass *createAArch64PostCoalescerPass();
@@ -209,6 +210,7 @@ void initializeMachineSMEABIPass(PassRegistry &);
 void initializeAArch64SRLTDefineSuperRegsLegacyPass(PassRegistry &);
 void initializeSVEShuffleOptsPass(PassRegistry &);
 void initializeAArch64Arm64ECCallLoweringPass(PassRegistry &);
+void initializeAArch64GuardHighBitLegacyPass(PassRegistry &);
 
 class AArch64SVEShuffleOptsPass
     : public OptionalPassInfoMixin<AArch64SVEShuffleOptsPass> {
@@ -251,6 +253,13 @@ public:
 
 class AArch64BranchTargetsPass
     : public OptionalPassInfoMixin<AArch64BranchTargetsPass> {
+public:
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+};
+
+class AArch64GuardHighBitPass
+    : public OptionalPassInfoMixin<AArch64GuardHighBitPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);
