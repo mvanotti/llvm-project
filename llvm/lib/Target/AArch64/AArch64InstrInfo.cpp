@@ -46,6 +46,7 @@
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstBuilder.h"
 #include "llvm/MC/MCInstrDesc.h"
@@ -170,13 +171,102 @@ static std::optional<unsigned> getLFIInstSizeInBytes(const MachineInstr &MI) {
   return std::nullopt;
 }
 
+std::optional<unsigned>
+AArch64InstrInfo::getGuardHighBit(const MachineFunction &MF, bool ReportError) {
+  Attribute Attr = MF.getFunction().getFnAttribute("guard-high-bit");
+  if (Attr.isValid()) {
+    StringRef Val = Attr.getValueAsString();
+    if (Val == "none")
+      return std::nullopt;
+    unsigned Bit = 0;
+    if (!Val.getAsInteger(10, Bit) && Bit < 64)
+      return Bit;
+    if (ReportError)
+      MF.getContext().reportError(
+          SMLoc(), "invalid 'guard-high-bit' function attribute value '" + Val +
+                       "' (expected 'none' or integer in [0, 63])");
+    return std::nullopt;
+  }
+
+  int CLBit = MF.getSubtarget<AArch64Subtarget>().getCLOpts().guard_high_bit;
+  if (CLBit < 0)
+    return std::nullopt;
+  if (CLBit >= 64) {
+    if (ReportError)
+      MF.getContext().reportError(
+          SMLoc(),
+          "invalid -aarch64-guard-high-bit value (expected -1 or 0..63)");
+    return std::nullopt;
+  }
+  return static_cast<unsigned>(CLBit);
+}
+
+std::optional<Register>
+AArch64InstrInfo::getGuardHighBitReg(const MachineInstr &MI) {
+  std::optional<Register> Reg;
+  switch (MI.getOpcode()) {
+  case AArch64::BLR:
+  case AArch64::BLRNoIP:
+  case AArch64::BLRAA:
+  case AArch64::BLRAB:
+  case AArch64::BLRAAZ:
+  case AArch64::BLRABZ:
+  case AArch64::BLRA:
+  case AArch64::BR:
+  case AArch64::BRAA:
+  case AArch64::BRAB:
+  case AArch64::BRAAZ:
+  case AArch64::BRABZ:
+  case AArch64::BRA:
+  case AArch64::TCRETURNri:
+  case AArch64::TCRETURNrix16x17:
+  case AArch64::TCRETURNrix17:
+  case AArch64::TCRETURNrinotx16:
+  case AArch64::TCRETURNriALL:
+  case AArch64::AUTH_TCRETURN:
+  case AArch64::AUTH_TCRETURN_BTI:
+    Reg = MI.getOperand(0).getReg();
+    break;
+  case AArch64::BLR_X16:
+    Reg = AArch64::X16;
+    break;
+  case AArch64::RET: {
+    Register RetReg = MI.getOperand(0).getReg();
+    if (RetReg != AArch64::LR)
+      Reg = RetReg;
+    break;
+  }
+  default:
+    return std::nullopt;
+  }
+
+  if (!Reg)
+    return std::nullopt;
+
+  // Preserve R_AARCH64_[AUTH_]TLSDESC_CALL adjacency if emitted explicitly.
+  if (const MachineBasicBlock *MBB = MI.getParent()) {
+    auto It = MI.getIterator();
+    if (It != MBB->instr_begin()) {
+      unsigned PrevOpc = std::prev(It)->getOpcode();
+      if (PrevOpc == AArch64::TLSDESCCALL ||
+          PrevOpc == AArch64::TLSAUTHDESCCALL)
+        return std::nullopt;
+    }
+  }
+  return Reg;
+}
+
 /// GetInstSize - Return the number of bytes of code the specified
 /// instruction may be.  This returns the maximum number of bytes.
 unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
+  const unsigned ExtraGuardBytes = (getGuardHighBitReg(MI) && MI.getParent() &&
+                                    MI.getMF() && getGuardHighBit(*MI.getMF()))
+                                       ? 8
+                                       : 0;
   const MCInstrDesc &Desc = MI.getDesc();
   if (!Desc.isPseudo() && !Subtarget.isLFI()) {
     assert(Desc.getSize() == 4 && "Unexpected instruction size");
-    return 4;
+    return 4 + ExtraGuardBytes;
   }
 
   const MachineBasicBlock &MBB = *MI.getParent();
@@ -205,7 +295,7 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
       return *Size;
 
   if (!MI.isBundle() && isTailCallReturnInst(MI)) {
-    NumBytes = Desc.getSize() ? Desc.getSize() : 4;
+    NumBytes = (Desc.getSize() ? Desc.getSize() : 4) + ExtraGuardBytes;
 
     const auto *MFI = MF->getInfo<AArch64FunctionInfo>();
     if (!MFI->shouldSignReturnAddress(*MF))
@@ -222,7 +312,7 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   switch (Desc.getOpcode()) {
   default:
     if (Desc.getSize())
-      return Desc.getSize();
+      return Desc.getSize() + ExtraGuardBytes;
 
     // Anything not explicitly designated otherwise (i.e. pseudo-instructions
     // with fixed constant size but not specified in .td file) is a normal
@@ -297,7 +387,7 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
     break;
   }
 
-  return NumBytes;
+  return NumBytes + ExtraGuardBytes;
 }
 
 static void parseCondBranch(MachineInstr *LastInst, MachineBasicBlock *&Target,
@@ -10726,7 +10816,9 @@ AArch64InstrInfo::getOutliningCandidateInfo(
             if (outliningCandidatesSigningScopeConsensus(a, b) &&
                 outliningCandidatesSigningKeyConsensus(a, b) &&
                 outliningCandidatesV8_3OpsConsensus(a, b) &&
-                outliningCandidatesPAuthLRConsensus(a, b)) {
+                outliningCandidatesPAuthLRConsensus(a, b) &&
+                a.getMF()->getFunction().getFnAttribute("guard-high-bit") ==
+                    b.getMF()->getFunction().getFnAttribute("guard-high-bit")) {
               return false;
             }
             return true;

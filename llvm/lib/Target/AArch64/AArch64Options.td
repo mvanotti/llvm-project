@@ -70,6 +70,10 @@ defm : BoolField<"homogeneous-prolog-epilog", "false",
 defm : BoolField<"stack-tagging-merge-settag", "true",
   "merge settag instruction in function epilog">;
 
+// AArch64AsmPrinter.cpp / AArch64InstrInfo.cpp
+defm : ValueField<"aarch64-guard-high-bit", "int", "-1",
+  "Require bit N [0..63] to be set on indirect branch targets (-1 to disable)">;
+
 // AArch64InstrInfo.cpp
 defm : ValueField<"aarch64-b-offset-bits", "unsigned", "26",
   "Restrict range of B instructions (DEBUG)">;

@@ -305,6 +305,16 @@ public:
   /// Returns true if MI is one of the TCRETURN* instructions.
   static bool isTailCallReturnInst(const MachineInstr &MI);
 
+  /// Return the required high-bit index [0..63] for indirect branch targets in
+  /// \p MF if enabled via the "guard-high-bit" function attribute or
+  /// -aarch64-guard-high-bit, or std::nullopt if disabled.
+  static std::optional<unsigned> getGuardHighBit(const MachineFunction &MF,
+                                                 bool ReportError = false);
+
+  /// If \p MI is a forward-edge indirect call or branch whose target register
+  /// must be checked under guard-high-bit, return that 64-bit target register.
+  static std::optional<Register> getGuardHighBitReg(const MachineInstr &MI);
+
   /// Return the opcode that set flags when possible.  The caller is
   /// responsible for ensuring the opc has a flag setting equivalent.
   static unsigned convertToFlagSettingOpc(unsigned Opc);

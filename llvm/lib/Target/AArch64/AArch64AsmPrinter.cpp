@@ -91,6 +91,7 @@ class AArch64AsmPrinter : public AsmPrinter {
   AArch64MCInstLower MCInstLowering;
   FaultMaps FM;
   const AArch64Subtarget *STI;
+  std::optional<unsigned> CurrentFnGuardHighBit;
   bool ShouldEmitWeakSwiftAsyncExtendedFramePointerFlags = false;
   bool PtrauthInitFini = false;
   bool PtrauthInitFiniAddressDisc = false;
@@ -313,6 +314,8 @@ public:
 
     AArch64FI = MF.getInfo<AArch64FunctionInfo>();
     STI = &MF.getSubtarget<AArch64Subtarget>();
+    CurrentFnGuardHighBit =
+        AArch64InstrInfo::getGuardHighBit(MF, /*ReportError=*/true);
 
     SetupMachineFunction(MF);
 
@@ -3466,6 +3469,27 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
     assert(STI->getInstrInfo()->getInstSizeInBytes(*MI) >= InstsEmitted * 4);
   });
 #endif
+
+  if (CurrentFnGuardHighBit) {
+    if (std::optional<Register> Reg =
+            AArch64InstrInfo::getGuardHighBitReg(*MI)) {
+      MCSymbol *Pass = OutContext.createTempSymbol();
+      const auto *PassExpr = MCSymbolRefExpr::create(Pass, OutContext);
+      if (*CurrentFnGuardHighBit < 32) {
+        EmitToStreamer(*OutStreamer, MCInstBuilder(AArch64::TBNZW)
+                                         .addReg(getWRegFromXReg(*Reg))
+                                         .addImm(*CurrentFnGuardHighBit)
+                                         .addExpr(PassExpr));
+      } else {
+        EmitToStreamer(*OutStreamer, MCInstBuilder(AArch64::TBNZX)
+                                         .addReg(*Reg)
+                                         .addImm(*CurrentFnGuardHighBit)
+                                         .addExpr(PassExpr));
+      }
+      EmitToStreamer(*OutStreamer, MCInstBuilder(AArch64::BRK).addImm(1));
+      OutStreamer->emitLabel(Pass);
+    }
+  }
 
   // Do any auto-generated pseudo lowerings.
   if (MCInst OutInst; lowerPseudoInstExpansion(MI, OutInst)) {
